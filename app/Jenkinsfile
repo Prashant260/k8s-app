@@ -105,7 +105,7 @@ spec:
                         docker version || true
 
                         docker build \
-                          -t ${IMAGE_REPO}:${IMAGE_TAG} .
+                          -t mew-app:v2.0.0 .
                         '''
                     }
                 }
