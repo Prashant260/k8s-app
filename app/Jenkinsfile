@@ -102,10 +102,10 @@ spec:
                 container('python') {
                     dir('app') {
                         sh '''
-                        docker version || true
+                        docker version 
 
                         docker build \
-                          -t mew-app:v2.0.0 .
+                          -t mew-app:latest.
                         '''
                     }
                 }
