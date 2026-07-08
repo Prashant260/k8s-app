@@ -50,7 +50,7 @@ spec:
         KUBE_CREDENTIALS_ID = "kubeconfig"
         DOCKER_CREDENTIALS_ID = "DOCKER_CREDENTIALS_ID"
 
-        DEPLOY_TO_K8S = "false"
+        DEPLOY_TO_K8S = "true"
     }
 
     stages {
