@@ -134,7 +134,7 @@ spec:
                               -u "$DOCKER_USER" \
                               --password-stdin
 
-                            docker push ${IMAGE_REPO}:${IMAGE_TAG}
+                            docker push mew-app:latest
                             '''
                         }
                     }
