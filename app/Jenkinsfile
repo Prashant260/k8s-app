@@ -1,0 +1,79 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_REPO = 'mew-app'
+    IMAGE_TAG = "${env.BUILD_NUMBER ?: 'latest'}"
+    DEPLOY_NAMESPACE = 'pakistan'
+    KUBE_CREDENTIALS_ID = 'kubeconfig'
+    DOCKER_CREDENTIALS_ID = ''
+    DEPLOY_TO_K8S = 'false'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        sh '''
+          python3 -m pip install -r requirements.txt
+          python3 -m unittest discover -s tests -v
+        '''
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
+      }
+    }
+
+    stage('Push Docker Image') {
+      when {
+        expression { return env.DOCKER_CREDENTIALS_ID?.trim() }
+      }
+      steps {
+        withCredentials([
+          usernamePassword(
+            credentialsId: env.DOCKER_CREDENTIALS_ID,
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )
+        ]) {
+          sh '''
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker push ${IMAGE_REPO}:${IMAGE_TAG}
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      when {
+        expression { return env.DEPLOY_TO_K8S == 'true' }
+      }
+      steps {
+        withCredentials([file(credentialsId: env.KUBE_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+          sh '''
+            export KUBECONFIG=$KUBECONFIG
+            helm upgrade --install mew-app ./helm/mew-app \
+              --namespace ${DEPLOY_NAMESPACE} \
+              --create-namespace \
+              --set image.repository=${IMAGE_REPO} \
+              --set image.tag=${IMAGE_TAG}
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
+    }
+  }
+}
