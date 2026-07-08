@@ -1,7 +1,7 @@
 pipeline {
-  agent {
-    kubernetes {
-      yaml '''
+    agent {
+        kubernetes {
+            yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
@@ -21,165 +21,170 @@ spec:
     - cat
     tty: true
 '''
-    }
-  }
-
-  environment {
-    APP_DIR = "app"
-
-    IMAGE_REPO = "prashant260/mew-app"
-    IMAGE_TAG = "${BUILD_NUMBER}"
-
-    DEPLOY_NAMESPACE = "pakistan"
-
-    KUBE_CREDENTIALS_ID = "kubeconfig"
-    DOCKER_CREDENTIALS_ID = "DOCKER_CREDENTIALS_ID"
-
-    DEPLOY_TO_K8S = "false"
-  }
-
-  stages {
-
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
-    }
-
-    stage('Debug Workspace') {
-      steps {
-        container('python') {
-          sh '''
-          echo "WORKSPACE = $WORKSPACE"
-
-          pwd
-
-          ls -la
-
-          echo "Repository Tree"
-
-          find . -maxdepth 3
-          '''
         }
-      }
     }
 
-    stage('Run Tests') {
-      steps {
-        dir("app") {
-    sh '''
-    pwd
-    ls -la
+    environment {
+        APP_DIR = "app"
 
-    python3 -m venv .venv
-    . .venv/bin/activate
-    pip install -r requirements.txt
-    '''
-}
-          }
-        }
-      }
+        IMAGE_REPO = "prashant260/mew-app"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+
+        DEPLOY_NAMESPACE = "pakistan"
+
+        KUBE_CREDENTIALS_ID = "kubeconfig"
+        DOCKER_CREDENTIALS_ID = "DOCKER_CREDENTIALS_ID"
+
+        DEPLOY_TO_K8S = "false"
     }
 
-    stage('Build Docker Image') {
-      steps {
-        container('python') {
-          dir("${APP_DIR}") {
-            sh '''
-            docker version || true
+    stages {
 
-            docker build \
-              -t ${IMAGE_REPO}:${IMAGE_TAG} .
-            '''
-          }
-        }
-      }
-    }
-
-    stage('Push Docker Image') {
-      when {
-        expression {
-          return env.DOCKER_CREDENTIALS_ID?.trim()
-        }
-      }
-
-      steps {
-        container('python') {
-          dir("${APP_DIR}") {
-
-            withCredentials([
-              usernamePassword(
-                credentialsId: env.DOCKER_CREDENTIALS_ID,
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-              )
-            ]) {
-
-              sh '''
-              echo "$DOCKER_PASS" | docker login \
-                -u "$DOCKER_USER" \
-                --password-stdin
-
-              docker push ${IMAGE_REPO}:${IMAGE_TAG}
-              '''
+        stage('Checkout') {
+            steps {
+                checkout scm
             }
-          }
         }
-      }
-    }
 
-    stage('Deploy to Kubernetes') {
+        stage('Debug Workspace') {
+            steps {
+                container('python') {
+                    sh '''
+                    echo "WORKSPACE=$WORKSPACE"
 
-      when {
-        expression {
-          return env.DEPLOY_TO_K8S == "true"
-        }
-      }
+                    pwd
 
-      steps {
+                    ls -la
 
-        container('python') {
+                    echo "Repository Tree"
 
-          dir("${APP_DIR}") {
-
-            withCredentials([
-              file(
-                credentialsId: env.KUBE_CREDENTIALS_ID,
-                variable: 'KUBECONFIG'
-              )
-            ]) {
-
-              sh '''
-              apt-get update
-
-              apt-get install -y curl
-
-              curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-              export KUBECONFIG=$KUBECONFIG
-
-              helm upgrade --install mew-app ./helm/mew-app \
-                --namespace ${DEPLOY_NAMESPACE} \
-                --create-namespace \
-                --set image.repository=${IMAGE_REPO} \
-                --set image.tag=${IMAGE_TAG}
-              '''
+                    find . -maxdepth 3
+                    '''
+                }
             }
-          }
         }
-      }
-    }
-  }
 
-  post {
-    always {
-      container('python') {
-        sh '''
-        rm -rf app/.venv || true
-        '''
-      }
+        stage('Run Tests') {
+            steps {
+                container('python') {
+                    dir('app') {
+                        sh '''
+                        set -ex
 
-      deleteDir()
+                        pwd
+                        ls -la
+
+                        python3 -m venv .venv
+
+                        . .venv/bin/activate
+
+                        pip install --upgrade pip
+
+                        pip install --no-cache-dir -r requirements.txt
+
+                        if [ -d tests ]; then
+                            python -m unittest discover -s tests -v
+                        else
+                            echo "No tests directory found. Skipping tests."
+                        fi
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('python') {
+                    dir('app') {
+                        sh '''
+                        docker version || true
+
+                        docker build \
+                          -t ${IMAGE_REPO}:${IMAGE_TAG} .
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            when {
+                expression {
+                    return env.DOCKER_CREDENTIALS_ID?.trim()
+                }
+            }
+
+            steps {
+                container('python') {
+                    dir('app') {
+                        withCredentials([
+                            usernamePassword(
+                                credentialsId: env.DOCKER_CREDENTIALS_ID,
+                                usernameVariable: 'DOCKER_USER',
+                                passwordVariable: 'DOCKER_PASS'
+                            )
+                        ]) {
+                            sh '''
+                            echo "$DOCKER_PASS" | docker login \
+                              -u "$DOCKER_USER" \
+                              --password-stdin
+
+                            docker push ${IMAGE_REPO}:${IMAGE_TAG}
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when {
+                expression {
+                    return env.DEPLOY_TO_K8S == "true"
+                }
+            }
+
+            steps {
+                container('python') {
+                    dir('app') {
+                        withCredentials([
+                            file(
+                                credentialsId: env.KUBE_CREDENTIALS_ID,
+                                variable: 'KUBECONFIG'
+                            )
+                        ]) {
+                            sh '''
+                            apt-get update
+
+                            apt-get install -y curl
+
+                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+                            export KUBECONFIG=$KUBECONFIG
+
+                            helm upgrade --install mew-app ./helm/mew-app \
+                              --namespace ${DEPLOY_NAMESPACE} \
+                              --create-namespace \
+                              --set image.repository=${IMAGE_REPO} \
+                              --set image.tag=${IMAGE_TAG}
+                            '''
+                        }
+                    }
+                }
+            }
+        }
     }
-  }
+
+    post {
+        always {
+            container('python') {
+                sh '''
+                rm -rf app/.venv || true
+                '''
+            }
+
+            deleteDir()
+        }
+    }
 }
