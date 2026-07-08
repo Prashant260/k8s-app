@@ -107,9 +107,20 @@ spec:
                 apt-get update
                 apt-get install -y --no-install-recommends docker.io
 
-                docker --version
-                docker version
+                echo "PATH=$PATH"
 
+                which docker || true
+                command -v docker || true
+
+                ls -l /usr/bin/docker || true
+                ls -l /usr/sbin/docker || true
+                ls -l /usr/local/bin/docker || true
+
+                /usr/bin/docker --version || true
+
+                /usr/bin/docker version || true
+                docker --version
+                
                 docker build -t mew-app:latest.
                         '''
                     }
