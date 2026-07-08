@@ -64,34 +64,38 @@ spec:
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                container('python') {
-                    dir('app') {
-                        sh '''
-                        set -ex
+       stage('Run Tests') {
+    steps {
+        container('python') {
+            dir('app') {
+                sh '''
+                set -ex
 
-                        pwd
-                        ls -la
+                pwd
+                ls -la
 
-                        python3 -m venv .venv
+                # Remove any committed virtual environments
+                rm -rf .venv
+                rm -rf venv
 
-                        . .venv/bin/activate
+                python3 -m venv .venv
 
-                        pip install --upgrade pip
+                . .venv/bin/activate
 
-                        pip install --no-cache-dir -r requirements.txt
+                python -m pip install --upgrade pip
 
-                        if [ -d tests ]; then
-                            python -m unittest discover -s tests -v
-                        else
-                            echo "No tests directory found. Skipping tests."
-                        fi
-                        '''
-                    }
-                }
+                pip install -r requirements.txt
+
+                if [ -d tests ]; then
+                    python -m unittest discover -s tests -v
+                else
+                    echo "No tests directory found."
+                fi
+                '''
             }
         }
+    }
+}
 
         stage('Build Docker Image') {
             steps {
