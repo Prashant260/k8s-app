@@ -102,12 +102,15 @@ spec:
                 container('python') {
                     dir('app') {
                         sh '''
-                        apt install -y docker.io 
+                set -ex
 
-                        docker version 
+                apt-get update
+                apt-get install -y --no-install-recommends docker.io
 
-                        docker build \
-                          -t mew-app:latest.
+                docker --version
+                docker version
+
+                docker build -t mew-app:latest.
                         '''
                     }
                 }
