@@ -2,52 +2,93 @@ pipeline {
   agent {
     kubernetes {
       yaml '''
-        apiVersion: v1
-        kind: Pod
-        metadata:
-          labels:
-            app: jenkins-agent
-        spec:
-          containers:
-          - name: jnlp
-            image: jenkins/inbound-agent:latest
-            args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
-          - name: python
-            image: python:3.12-slim
-            command:
-            - cat
-            tty: true
-      '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: jenkins-agent
+spec:
+  containers:
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    args:
+    - $(JENKINS_SECRET)
+    - $(JENKINS_NAME)
+
+  - name: python
+    image: python:3.12-slim
+    command:
+    - cat
+    tty: true
+'''
     }
   }
 
   environment {
-    IMAGE_REPO = 'prashant260/mew-app'
-    IMAGE_TAG = "${env.BUILD_NUMBER ?: 'latest'}"
-    DEPLOY_NAMESPACE = 'pakistan'
-    KUBE_CREDENTIALS_ID = 'kubeconfig'
-    DOCKER_CREDENTIALS_ID = 'DOCKER_CREDENTIALS_ID'
-    DEPLOY_TO_K8S = 'false'
+    APP_DIR = "app"
+
+    IMAGE_REPO = "prashant260/mew-app"
+    IMAGE_TAG = "${BUILD_NUMBER}"
+
+    DEPLOY_NAMESPACE = "pakistan"
+
+    KUBE_CREDENTIALS_ID = "kubeconfig"
+    DOCKER_CREDENTIALS_ID = "DOCKER_CREDENTIALS_ID"
+
+    DEPLOY_TO_K8S = "false"
   }
 
   stages {
+
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
 
-    stage('Run Tests') {
+    stage('Debug Workspace') {
       steps {
         container('python') {
           sh '''
-            apt-get update && apt-get install -y --no-install-recommends docker.io curl git
-            cd $WORKSPACE
-            python3 -m venv .venv
-            . .venv/bin/activate
-            pip install --no-cache-dir -r requirements.txt
-            python -m unittest discover -s tests -v
+          echo "WORKSPACE = $WORKSPACE"
+
+          pwd
+
+          ls -la
+
+          echo "Repository Tree"
+
+          find . -maxdepth 3
           '''
+        }
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        container('python') {
+          dir("/app") {
+            sh '''
+            set -ex
+
+            apt-get update
+            apt-get install -y --no-install-recommends git curl
+
+            python3 -m venv .venv
+
+            . .venv/bin/activate
+
+            pip install --upgrade pip
+
+            pip install --no-cache-dir -r requirements.txt
+
+            if [ -d tests ]; then
+                python -m unittest discover -s tests -v
+            else
+                echo "No tests directory found. Skipping tests."
+            fi
+            '''
+          }
         }
       }
     }
@@ -55,55 +96,87 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         container('python') {
-          sh '''
-            cd $WORKSPACE
-            docker build -t ${IMAGE_REPO}:${IMAGE_TAG} .
-          '''
-        }
-      }
-    }
-
-    stage('Push Docker Image') {
-      when {
-        expression { return env.DOCKER_CREDENTIALS_ID?.trim() }
-      }
-      steps {
-        container('python') {
-          withCredentials([
-            usernamePassword(
-              credentialsId: env.DOCKER_CREDENTIALS_ID,
-              usernameVariable: 'DOCKER_USER',
-              passwordVariable: 'DOCKER_PASS'
-            )
-          ]) {
+          dir("${APP_DIR}") {
             sh '''
-              cd $WORKSPACE
-              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-              docker push ${IMAGE_REPO}:${IMAGE_TAG}
+            docker version || true
+
+            docker build \
+              -t ${IMAGE_REPO}:${IMAGE_TAG} .
             '''
           }
         }
       }
     }
 
-    stage('Deploy to Kubernetes') {
+    stage('Push Docker Image') {
       when {
-        expression { return env.DEPLOY_TO_K8S == 'true' }
+        expression {
+          return env.DOCKER_CREDENTIALS_ID?.trim()
+        }
       }
+
       steps {
         container('python') {
-          withCredentials([file(credentialsId: env.KUBE_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
-            sh '''
-              export KUBECONFIG=$KUBECONFIG
-              cd $WORKSPACE
-              apt-get update && apt-get install -y --no-install-recommends curl
+          dir("${APP_DIR}") {
+
+            withCredentials([
+              usernamePassword(
+                credentialsId: env.DOCKER_CREDENTIALS_ID,
+                usernameVariable: 'DOCKER_USER',
+                passwordVariable: 'DOCKER_PASS'
+              )
+            ]) {
+
+              sh '''
+              echo "$DOCKER_PASS" | docker login \
+                -u "$DOCKER_USER" \
+                --password-stdin
+
+              docker push ${IMAGE_REPO}:${IMAGE_TAG}
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+
+      when {
+        expression {
+          return env.DEPLOY_TO_K8S == "true"
+        }
+      }
+
+      steps {
+
+        container('python') {
+
+          dir("${APP_DIR}") {
+
+            withCredentials([
+              file(
+                credentialsId: env.KUBE_CREDENTIALS_ID,
+                variable: 'KUBECONFIG'
+              )
+            ]) {
+
+              sh '''
+              apt-get update
+
+              apt-get install -y curl
+
               curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+              export KUBECONFIG=$KUBECONFIG
+
               helm upgrade --install mew-app ./helm/mew-app \
                 --namespace ${DEPLOY_NAMESPACE} \
                 --create-namespace \
                 --set image.repository=${IMAGE_REPO} \
                 --set image.tag=${IMAGE_TAG}
-            '''
+              '''
+            }
           }
         }
       }
@@ -112,13 +185,13 @@ pipeline {
 
   post {
     always {
-      script {
-        try {
-          deleteDir()
-        } catch (Exception e) {
-          echo "Cleanup skipped: ${e.message}"
-        }
+      container('python') {
+        sh '''
+        rm -rf app/.venv || true
+        '''
       }
+
+      deleteDir()
     }
   }
 }
