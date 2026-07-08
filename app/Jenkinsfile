@@ -66,28 +66,16 @@ spec:
 
     stage('Run Tests') {
       steps {
-        container('python') {
-          dir("/app") {
-            sh '''
-            set -ex
+        dir("app") {
+    sh '''
+    pwd
+    ls -la
 
-            apt-get update
-            apt-get install -y --no-install-recommends git curl
-
-            python3 -m venv .venv
-
-            . .venv/bin/activate
-
-            pip install --upgrade pip
-
-            pip install --no-cache-dir -r requirements.txt
-
-            if [ -d tests ]; then
-                python -m unittest discover -s tests -v
-            else
-                echo "No tests directory found. Skipping tests."
-            fi
-            '''
+    python3 -m venv .venv
+    . .venv/bin/activate
+    pip install -r requirements.txt
+    '''
+}
           }
         }
       }
