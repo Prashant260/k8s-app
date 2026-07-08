@@ -102,6 +102,8 @@ spec:
                 container('python') {
                     dir('app') {
                         sh '''
+                        apt install -y docker.io 
+
                         docker version 
 
                         docker build \
