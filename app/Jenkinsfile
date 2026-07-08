@@ -42,6 +42,7 @@ pipeline {
         container('python') {
           sh '''
             apt-get update && apt-get install -y --no-install-recommends docker.io curl git
+            cd $WORKSPACE
             python3 -m venv .venv
             . .venv/bin/activate
             pip install --no-cache-dir -r requirements.txt
@@ -54,7 +55,10 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         container('python') {
-          sh "docker build -t ${IMAGE_REPO}:${IMAGE_TAG} ."
+          sh '''
+            cd $WORKSPACE
+            docker build -t ${IMAGE_REPO}:${IMAGE_TAG} .
+          '''
         }
       }
     }
@@ -73,6 +77,7 @@ pipeline {
             )
           ]) {
             sh '''
+              cd $WORKSPACE
               echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
               docker push ${IMAGE_REPO}:${IMAGE_TAG}
             '''
@@ -90,6 +95,7 @@ pipeline {
           withCredentials([file(credentialsId: env.KUBE_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
             sh '''
               export KUBECONFIG=$KUBECONFIG
+              cd $WORKSPACE
               apt-get update && apt-get install -y --no-install-recommends curl
               curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
               helm upgrade --install mew-app ./helm/mew-app \
@@ -106,7 +112,13 @@ pipeline {
 
   post {
     always {
-      deleteDir()
+      script {
+        try {
+          deleteDir()
+        } catch (Exception e) {
+          echo "Cleanup skipped: ${e.message}"
+        }
+      }
     }
   }
 }
