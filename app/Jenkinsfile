@@ -20,6 +20,21 @@ spec:
     command:
     - cat
     tty: true
+
+  - name: docker
+    image: docker:27.1.1-dind
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    securityContext:
+      privileged: true
+    command:
+    - dockerd
+    args:
+    - --host=unix:///var/run/docker.sock
+    - --host=tcp://0.0.0.0:2375
+    - --storage-driver=vfs
+    tty: true
 '''
         }
     }
@@ -99,30 +114,21 @@ spec:
 
         stage('Build Docker Image') {
             steps {
-                container('python') {
+                container('docker') {
                     dir('app') {
-                        sh '''
-                set -ex
+                        withEnv(['DOCKER_HOST=tcp://127.0.0.1:2375']) {
+                            sh '''
+                            set -ex
 
-                apt-get update
-                apt-get install -y --no-install-recommends docker.io
+                            for i in $(seq 1 20); do
+                                docker version >/dev/null 2>&1 && break
+                                echo "Waiting for Docker daemon..."
+                                sleep 2
+                            done
 
-                echo "PATH=$PATH"
-
-                which docker || true
-                command -v docker || true
-
-                ls -l /usr/bin/docker || true
-                ls -l /usr/sbin/docker || true
-                ls -l /usr/local/bin/docker || true
-
-                /usr/bin/docker --version || true
-
-                /usr/bin/docker version || true
-                docker --version
-                
-                docker build -t mew-app:latest.
-                        '''
+                            docker build -t mew-app:latest .
+                            '''
+                        }
                     }
                 }
             }
@@ -136,22 +142,32 @@ spec:
             }
 
             steps {
-                container('python') {
+                container('docker') {
                     dir('app') {
-                        withCredentials([
-                            usernamePassword(
-                                credentialsId: env.DOCKER_CREDENTIALS_ID,
-                                usernameVariable: 'DOCKER_USER',
-                                passwordVariable: 'DOCKER_PASS'
-                            )
-                        ]) {
-                            sh '''
-                            echo "$DOCKER_PASS" | docker login \
-                              -u "$DOCKER_USER" \
-                              --password-stdin
+                        withEnv(['DOCKER_HOST=tcp://127.0.0.1:2375']) {
+                            withCredentials([
+                                usernamePassword(
+                                    credentialsId: env.DOCKER_CREDENTIALS_ID,
+                                    usernameVariable: 'DOCKER_USER',
+                                    passwordVariable: 'DOCKER_PASS'
+                                )
+                            ]) {
+                                sh '''
+                                set -ex
 
-                            docker push mew-app:latest
-                            '''
+                                for i in $(seq 1 20); do
+                                    docker version >/dev/null 2>&1 && break
+                                    echo "Waiting for Docker daemon..."
+                                    sleep 2
+                                done
+
+                                echo "$DOCKER_PASS" | docker login \
+                                  -u "$DOCKER_USER" \
+                                  --password-stdin
+
+                                docker push mew-app:latest
+                                '''
+                            }
                         }
                     }
                 }
