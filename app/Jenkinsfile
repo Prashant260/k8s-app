@@ -126,7 +126,7 @@ spec:
                                 sleep 2
                             done
 
-                            docker build -t mew-app:latest .
+                            docker build -t prashant260/mew-app:${IMAGE_TAG} .
                             '''
                         }
                     }
@@ -165,7 +165,7 @@ spec:
                                   -u "$DOCKER_USER" \
                                   --password-stdin
 
-                                docker push mew-app:latest
+                                docker push prashant260/mew-app:${IMAGE_TAG}
                                 '''
                             }
                         }
