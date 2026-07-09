@@ -1,0 +1,32 @@
+controller:
+  serviceType: NodePort
+
+  nodePort: 32000
+
+  admin:
+    username: admin
+    password: admin123
+
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - github
+    - docker-workflow
+    - configuration-as-code
+    - credentials-binding
+    - pipeline-stage-view
+    - blueocean
+    - prometheus
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 2Gi
+
+persistence:
+  enabled: true
+  size: 10Gi
