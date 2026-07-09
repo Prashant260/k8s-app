@@ -17,3 +17,18 @@ venv/
 # Helm / Kubernetes local artifacts
 *.tgz
 venv/
+venv/
+__pycache__/
+*.pyc
+
+.env
+
+.idea/
+.vscode/
+
+*.log
+
+.DS_Store
+
+node_modules/
+

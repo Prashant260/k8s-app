@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -10,5 +10,6 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["python3", "app.py"]
+ENV APP_VERSION=1.0
 
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
