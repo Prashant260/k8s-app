@@ -170,16 +170,23 @@ spec:
                         sh '''
                         set -ex
 
-                        git config --global user.email "jenkins@local"
-                        git config --global user.name "Jenkins"
+apt-get update
+apt-get install -y git
 
-                        sed -i "s/tag:.*/tag: ${IMAGE_TAG}/" helm/mew-app/values.yaml
+git --version
 
-                        git add helm/mew-app/values.yaml
-                        git commit -m "Update image tag to ${IMAGE_TAG}" || true
+git config --global user.email "jenkins@local"
+git config --global user.name "Jenkins"
 
-                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Prashant260/k8s-app.git
-                        git push origin HEAD:main
+sed -i "s/tag:.*/tag: ${IMAGE_TAG}/" helm/mew-app/values.yaml
+
+git add helm/mew-app/values.yaml
+
+git commit -m "Update image tag to ${IMAGE_TAG}" || true
+
+git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Prashant260/k8s-app.git
+
+git push origin HEAD:main
                         '''
                     }
                 }
