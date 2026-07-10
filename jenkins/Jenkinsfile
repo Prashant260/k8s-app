@@ -175,6 +175,7 @@ apt-get install -y git
 
 git --version
 
+git config --global --add safe.directory /home/jenkins/agent/workspace/app
 git config --global user.email "jenkins@local"
 git config --global user.name "Jenkins"
 
