@@ -110,7 +110,7 @@ spec:
                                 sleep 2
                             done
 
-                            docker build -t prashant260/mew-app:${IMAGE_TAG} .
+                            docker build -t ${IMAGE_REPO}:${IMAGE_TAG} .
                             '''
                         }
                     }
@@ -148,7 +148,7 @@ spec:
                                   -u "$DOCKER_USER" \
                                   --password-stdin
 
-                                docker push prashant260/mew-app:${IMAGE_TAG}
+                                docker push ${IMAGE_REPO}:${IMAGE_TAG}
                                 '''
                             }
                         }
@@ -170,25 +170,24 @@ spec:
                         sh '''
                         set -ex
 
-apt-get update
-apt-get install -y git
+                        apt-get update
+                        apt-get install -y git
 
-git --version
+                        git --version
 
-git config --global --add safe.directory /home/jenkins/agent/workspace/app
-git config --global user.email "jenkins@local"
-git config --global user.name "Jenkins"
+                        git config --global --add safe.directory /home/jenkins/agent/workspace/app
+                        git config --global user.email "jenkins@local"
+                        git config --global user.name "Jenkins"
 
-sed -i "s|repository:.*|repository: ${IMAGE_REPO}|" helm/mew-app/values.yaml
-sed -i "s|tag:.*|tag: \"${IMAGE_TAG}\"|" helm/mew-app/values.yaml
+                        sed -i "s|repository:.*|repository: ${IMAGE_REPO}|" helm/mew-app/values.yaml
+                        sed -i "s|tag:.*|tag: \\\"${IMAGE_TAG}\\\"|" helm/mew-app/values.yaml
+                        sed -i "s|pullPolicy:.*|pullPolicy: Always|" helm/mew-app/values.yaml
 
-git add helm/mew-app/values.yaml
+                        git add helm/mew-app/values.yaml
+                        git commit -m "Update image tag to ${IMAGE_TAG}" || true
 
-git commit -m "Update image tag to ${IMAGE_TAG}" || true
-
-git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Prashant260/k8s-app.git
-
-git push origin HEAD:main
+                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Prashant260/k8s-app.git
+                        git push origin HEAD:main
                         '''
                     }
                 }
@@ -196,12 +195,16 @@ git push origin HEAD:main
         }
     }
 
-   post {
-    always {
-        container('python') {
-            sh '''
-            rm -rf app/.venv || true
-            '''
+    post {
+        always {
+            container('python') {
+                sh '''
+                rm -rf app/.venv || true
+                '''
+            }
+            influxDbPublisher(
+                selectedTarget: 'InfluxDB'
+            )
         }
     }
 }
