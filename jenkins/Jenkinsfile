@@ -41,20 +41,13 @@ spec:
 
     environment {
         APP_DIR = "app"
-
         IMAGE_REPO = "prashant260/mew-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
-
-        DEPLOY_NAMESPACE = "pakistan"
-
-        KUBE_CREDENTIALS_ID = "kubeconfig"
-        DOCKER_CREDENTIALS_ID = "DOCKER_CREDENTIALS_ID"
-
-        DEPLOY_TO_K8S = "true"
+        DOCKER_CREDENTIALS_ID = "dockerhub"
+        GITHUB_CREDENTIALS_ID = "github"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -66,56 +59,47 @@ spec:
                 container('python') {
                     sh '''
                     echo "WORKSPACE=$WORKSPACE"
-
                     pwd
-
                     ls -la
-
                     echo "Repository Tree"
-
                     find . -maxdepth 3
                     '''
                 }
             }
         }
 
-       stage('Run Tests') {
-    steps {
-        container('python') {
-            dir('app') {
-                sh '''
-                set -ex
+        stage('Run Tests') {
+            steps {
+                container('python') {
+                    dir(env.APP_DIR) {
+                        sh '''
+                        set -ex
+                        pwd
+                        ls -la
 
-                pwd
-                ls -la
+                        rm -rf .venv
+                        rm -rf venv
 
-                # Remove any committed virtual environments
-                rm -rf .venv
-                rm -rf venv
+                        python3 -m venv .venv
+                        . .venv/bin/activate
+                        python -m pip install --upgrade pip
+                        pip install -r requirements.txt
 
-                python3 -m venv .venv
-
-                . .venv/bin/activate
-
-                python -m pip install --upgrade pip
-
-                pip install -r requirements.txt
-
-                if [ -d tests ]; then
-                    python -m unittest discover -s tests -v
-                else
-                    echo "No tests directory found."
-                fi
-                '''
+                        if [ -d tests ]; then
+                            python -m unittest discover -s tests -v
+                        else
+                            echo "No tests directory found."
+                        fi
+                        '''
+                    }
+                }
             }
         }
-    }
-}
 
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    dir('app') {
+                    dir(env.APP_DIR) {
                         withEnv(['DOCKER_HOST=tcp://127.0.0.1:2375']) {
                             sh '''
                             set -ex
@@ -140,10 +124,9 @@ spec:
                     return env.DOCKER_CREDENTIALS_ID?.trim()
                 }
             }
-
             steps {
                 container('docker') {
-                    dir('app') {
+                    dir(env.APP_DIR) {
                         withEnv(['DOCKER_HOST=tcp://127.0.0.1:2375']) {
                             withCredentials([
                                 usernamePassword(
@@ -174,44 +157,30 @@ spec:
             }
         }
 
-        stage('Debug Deploy Flag') {
-            steps {
-                echo "DEPLOY_TO_K8S = '${env.DEPLOY_TO_K8S}'"
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            when {
-                expression {
-                    return env.DEPLOY_TO_K8S == "true"
-                }
-            }
-
+        stage('Update Helm Chart') {
             steps {
                 container('python') {
-                    dir('app') {
-                        withCredentials([
-                            file(
-                                credentialsId: env.KUBE_CREDENTIALS_ID,
-                                variable: 'KUBECONFIG'
-                            )
-                        ]) {
-                            sh '''
-                            apt-get update
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: env.GITHUB_CREDENTIALS_ID,
+                            usernameVariable: 'GIT_USER',
+                            passwordVariable: 'GIT_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                        set -ex
 
-                            apt-get install -y curl
+                        git config --global user.email "jenkins@local"
+                        git config --global user.name "Jenkins"
 
-                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                        sed -i "s/tag:.*/tag: ${IMAGE_TAG}/" helm/mew-app/values.yaml
 
-                            export KUBECONFIG=$KUBECONFIG
+                        git add helm/mew-app/values.yaml
+                        git commit -m "Update image tag to ${IMAGE_TAG}" || true
 
-                            helm upgrade --install mew-app ./helm/mew-app \
-                              --namespace ${DEPLOY_NAMESPACE} \
-                              --create-namespace \
-                              --set image.repository=${IMAGE_REPO} \
-                              --set image.tag=${IMAGE_TAG}
-                            '''
-                        }
+                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Prashant260/k8s-app.git
+                        git push origin HEAD:main
+                        '''
                     }
                 }
             }
@@ -225,7 +194,6 @@ spec:
                 rm -rf app/.venv || true
                 '''
             }
-
             deleteDir()
         }
     }
