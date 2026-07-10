@@ -196,14 +196,12 @@ git push origin HEAD:main
         }
     }
 
-    post {
-        always {
-            container('python') {
-                sh '''
-                rm -rf app/.venv || true
-                '''
-            }
-            deleteDir()
+   post {
+    always {
+        container('python') {
+            sh '''
+            rm -rf app/.venv || true
+            '''
         }
     }
 }
